@@ -1,0 +1,19 @@
+CVE stands for Common Vulnerabilities and Exposures. Think of it as a standardized "ID card" system for publicly known security flaws. Every time a security researcher, company, or hacker discovers a real vulnerability in some piece of software, it (usually) gets registered and assigned a unique ID, in the format:
+
+EX: CVE-2021-44228
+CVE (the system name), 2021 (year it was assigned/disclosed), 44228 (a unique sequential number)
+
+-THIS EXAMPLE IS : "Log4Shell" vulnerability" — a massive, real-world flaw in a widely-used Java logging library that made global news in 2021
+
+
+Each CVE entry typically includes:
+
+-A description of the vulnerability
+-Which software/versions are affected
+-A severity score (CVSS — Common Vulnerability Scoring System, roughly 0-10, where 10 is "catastrophic")
+-Sometimes links to patches or more technical detail
+
+NVD = National Vulnerability Database — a US government-run (NIST), free, public database that takes CVE entries and enriches them with additional structured data (severity scores, affected product lists, etc.).
+
+
+

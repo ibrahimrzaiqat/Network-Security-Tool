@@ -4,8 +4,10 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from config import NVD_API_KEY
+
 # cd "desktop/ibrahim/projects/network security toolkit"
-# python TCPscanner.py 127.0.0.1 1 1024
+# python TCPscanner.py 127.0.0.1 1 1024 200
 
 
 #if the user puts the pool num use it else max count is 100
@@ -57,6 +59,47 @@ def scan_range(target_ip, start_port, ending_port, maximum_workers=100):
     
     return open_ports
 
+def grab_banner(target_ip, port):
+    http_nudge=b"HEAD / HTTP/1.1\r\nHost: target\r\n\r\n"
+    banner_socket= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        address= (target_ip,port)
+        banner_socket.settimeout(2)
+        banner_socket.connect(address)
+        try:
+            data= banner_socket.recv(1024)
+        except socket.timeout:
+            data=b''
+
+        if data:
+            try:
+                data= data.decode("UTF-8")
+                return data
+            except UnicodeDecodeError as e:
+                print(f"Decoding ERROR : {e}")
+                return None
+        else:
+            banner_socket.send(http_nudge)
+            try:
+                answer = banner_socket.recv(1024)
+            except socket.timeout:
+                answer = b''
+            if answer:
+                try:
+                    answer= answer.decode("UTF-8")
+                    return answer
+                except UnicodeDecodeError as e:
+                    print(f"Decoding ERROR : {e}")
+                    return None 
+            else:
+                return None  
+    except socket.error as e:
+        print(f"Socket connection error: {e}")
+        return None
+    finally:
+        banner_socket.close()
+    
+
 
 if __name__ =="__main__":
     if len(sys.argv) < 4 or len(sys.argv) > 5:
@@ -74,7 +117,13 @@ if __name__ =="__main__":
         if requested < 500:
             maximum_workers = requested
 
-    scan_range(target_ip, starting_port, ending_port, maximum_workers)
+    for port in scan_range(target_ip, starting_port, ending_port, maximum_workers):
+        banner=grab_banner(target_ip, port)
+        if banner:
+            print(f"Port: {port}: {banner.strip()}")
+        else:
+            print(f"Port {port}: no banner received")
 
+    
 #python scanner.py 192.168.1.10 1 1024
 #sys.argv = ["scanner.py", "192.168.1.10", "1", "1024"]
