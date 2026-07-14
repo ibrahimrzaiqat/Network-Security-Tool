@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import NVD_API_KEY
 
+RED = "\033[91m"
+YELLOW = "\033[93m"
 RESET = "\033[0m"
 
 def scan_ports(target_ip, target_port):
@@ -107,7 +109,7 @@ def query_NVD(software_name : str):
             return response.json()
         else:
             print(f"NVD request denied for {software_name} with status code: {response.status_code}")
-            return Non     
+            return None     
     except requests.exceptions.Timeout:
         print(f"NVD API request timed out for: {software_name}")
         return None
@@ -160,15 +162,6 @@ def extract_software_list(banner: str):
     matches = re.findall(r'([A-Za-z][\w\-]*)/([\d][\w.\-]*)', banner)
     return matches  # returns a list of tuples: [("SimpleHTTP", "0.6"), ("Python", "3.14.4")]
 
-#Unused funtcion kept in case
-def get_software_name(banner: str):
-    lines= banner.splitlines()
-    name=lines[0]
-    for line in lines:
-        if line.startswith("Server:"):
-            name= line.split("Server:")[1].strip()
-    return name
-
 if __name__ =="__main__":
     if len(sys.argv) < 4 or len(sys.argv) > 5:
         print("Usage: python scanner.py <target_ip> <start_port> <end_port> [max_workers]")
@@ -209,11 +202,14 @@ if __name__ =="__main__":
                     cve_cache[search_query]=cve_data
                     time.sleep(3)#sleep some secs cuz of NVD API rate limit
 
-                scan_report["results"][port]= {
+                if port not in scan_report["results"]:
+                    scan_report["results"][port] = []
+                
+                scan_report["results"][port].append({
                     "software": search_query,
                     "cves_found": len(cve_data) if cve_data else 0,
                     "cve_details": cve_data
-                }
+                })
 
                 if cve_data:
                     print(f"CVEs Found: {len(cve_data)}")
@@ -230,7 +226,7 @@ if __name__ =="__main__":
                             elif float(severity) >= 7.0:
                                 color = YELLOW
 
-                        print(f"  - {cve['id']} (Severity: {cve['severity']})")
+                        print(f"  {color}- {cve['id']} (Severity: {cve['severity']}){RESET}")
                         print(f"    Info: {short_desc}\n")
                 else:
                     print("CVE: None found or query failed.")
