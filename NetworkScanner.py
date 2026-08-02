@@ -4,6 +4,7 @@ import time
 import requests
 import re
 import json
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import NVD_API_KEY
@@ -28,7 +29,7 @@ def scan_ports(target_ip, target_port):
 def scan_range(target_ip, start_port, ending_port, maximum_workers=100):
     if start_port> ending_port:
         print(f"Starting port cant be less than ending port.")
-        return 
+        return []
     
     
     print(f"Scanning {target_ip} from starting from port: {start_port}, ending at port: {ending_port}")
@@ -162,21 +163,32 @@ def extract_software_list(banner: str):
     matches = re.findall(r'([A-Za-z][\w\-]*)/([\d][\w.\-]*)', banner)
     return matches  # returns a list of tuples: [("SimpleHTTP", "0.6"), ("Python", "3.14.4")]
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Network Scanner with CVE Lookup")
+    parser.add_argument("target_ip", help="Target IP address to scan")
+    parser.add_argument("start_port", type=int, help="Starting port number")
+    parser.add_argument("end_port", type=int, help="Ending port number")
+    parser.add_argument("--workers", type=int, default=100, help="Number of concurrent scan threads (default: 100)")
+    return parser.parse_args()
+
 if __name__ =="__main__":
-    if len(sys.argv) < 4 or len(sys.argv) > 5:
-        print("Usage: python scanner.py <target_ip> <start_port> <end_port> [max_workers]")
+    args = parse_arguments()
+    
+    target_ip = args.target_ip
+    starting_port = args.start_port
+    ending_port = args.end_port
+    maximum_workers = args.workers
+
+    if starting_port > ending_port:
+        print("Starting port can't be greater than ending port.")
         sys.exit(1)
     
-    target_ip = sys.argv[1]
-    starting_port = int(sys.argv[2])
-    ending_port = int(sys.argv[3])
-
-
-    maximum_workers=100
-    if len(sys.argv) > 4:
-        requested = int(sys.argv[4])
-        if requested < 500:
-            maximum_workers = requested
+    if maximum_workers >= 500:
+        print(f"Requested {maximum_workers} workers exceeds the safe limit — using 500 instead.")
+        maximum_workers = 500
+    elif maximum_workers <= 0:
+        print(f"Requested {maximum_workers} workers is invalid — using 100 instead.")
+        maximum_workers = 100
 
     cve_cache={}
     scan_report={"target_ip": target_ip, "results": {}}
@@ -235,10 +247,9 @@ if __name__ =="__main__":
         else:
             print(f"Port {port}: no banner received")
 
-    report_filename = f"scan_report_{target_ip}.json"
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    report_filename = f"scan_report_({target_ip})_({starting_port}-{ending_port})_({timestamp}).json"
     with open(report_filename, "w") as outfile:
         json.dump(scan_report, outfile, indent=4)
     
     print(f"\nScan complete! Full results saved to {report_filename}")
-#python scanner.py 192.168.1.10 1 1024
-#sys.argv = ["scanner.py", "192.168.1.10", "1", "1024"]
