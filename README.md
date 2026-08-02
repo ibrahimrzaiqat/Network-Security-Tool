@@ -46,7 +46,7 @@ Safe targets for practice:
 
 1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/ibrahimrzaiqat/Network-Security-Tool.git
    cd network-security-toolkit
    ```
 
