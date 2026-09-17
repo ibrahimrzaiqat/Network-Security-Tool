@@ -1,0 +1,200 @@
+:root {
+    --ink: #0F1720;
+    --panel: #16212C;
+    --panel-line: #263444;
+    --text: #E7EDF3;
+    --text-muted: #8CA0B3;
+    --accent: #5EA8FF;
+
+    --critical: #E8544E;
+    --high: #E8A33D;
+    --medium: #D9C24E;
+    --low: #43C59E;
+    --unknown: #4B5A68;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 28px 40px 20px;
+    border-bottom: 1px solid var(--panel-line);
+}
+
+.brand {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.topbar h1 {
+    margin: 0;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 500;
+    font-size: 28px;
+    color: var(--text);
+}
+
+.report-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.report-picker select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--panel-line);
+    padding: 6px 10px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    max-width: 320px;
+}
+
+.readout {
+    display: flex;
+    gap: 40px;
+    padding: 22px 40px;
+    border-bottom: 1px solid var(--panel-line);
+}
+
+.readout-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.readout-value {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 30px;
+    font-weight: 600;
+}
+
+.readout-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.sev-critical-text .readout-value { color: var(--critical); }
+.sev-high-text .readout-value { color: var(--high); }
+
+.port-list {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 40px 80px;
+}
+
+.empty {
+    color: var(--text-muted);
+    font-family: "IBM Plex Mono", monospace;
+}
+
+.port-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-left: 3px solid var(--unknown);
+    margin-bottom: 16px;
+    padding: 16px 20px;
+}
+
+.port-card.sev-critical { border-left-color: var(--critical); }
+.port-card.sev-high { border-left-color: var(--high); }
+.port-card.sev-medium { border-left-color: var(--medium); }
+.port-card.sev-low { border-left-color: var(--low); }
+.port-card.sev-unknown { border-left-color: var(--unknown); }
+
+.port-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.port-number {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.badge {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid currentColor;
+}
+
+.badge.sev-critical { color: var(--critical); }
+.badge.sev-high { color: var(--high); }
+.badge.sev-medium { color: var(--medium); }
+.badge.sev-low { color: var(--low); }
+.badge.sev-unknown { color: var(--unknown); }
+
+.cve-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.finding {
+    padding: 10px 0;
+    border-top: 1px solid var(--panel-line);
+}
+
+.finding-head {
+    display: flex;
+    justify-content: space-between;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.finding-count {
+    color: var(--text-muted);
+}
+
+.cve-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cve-list li {
+    display: grid;
+    grid-template-columns: 130px 46px 1fr;
+    gap: 12px;
+    font-size: 13px;
+    padding: 4px 0;
+    color: var(--text-muted);
+}
+
+.cve-id {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--text);
+}
+
+.cve-sev {
+    font-family: "IBM Plex Mono", monospace;
+}
+
+@media (max-width: 640px) {
+    .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .readout { flex-wrap: wrap; gap: 20px; }
+    .cve-list li { grid-template-columns: 1fr; }
+}

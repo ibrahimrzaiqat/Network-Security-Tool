@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic Security Dashboard</title>
+<style>
+  :root {
+    --bg: #0B0F14;
+    --panel: #121821;
+    --panel-line: #1F2B38;
+    --text: #E6EDF3;
+    --muted: #7C8A9A;
+    --emerald: #2ED9A3;
+    --amber: #F5A623;
+    --crimson: #F0475C;
+    --unknown: #4B5A68;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "IBM Plex Sans", Arial, sans-serif;
+  }
+  header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  header .sub {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--panel-line);
+    background: var(--panel);
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--muted); }
+  .field input {
+    background: var(--bg);
+    border: 1px solid var(--panel-line);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    width: 140px;
+  }
+  #launchBtn {
+    background: var(--emerald);
+    color: #06231A;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #launchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .status-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .status-dot.scanning { background: var(--amber); animation: pulse 1s infinite; }
+  .status-dot.complete { background: var(--emerald); }
+  .status-dot.error { background: var(--crimson); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--panel-line);
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .metric {
+    background: var(--panel);
+    padding: 18px 24px;
+  }
+  .metric .value { font-size: 28px; font-weight: 700; }
+  .metric .label { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .metric.critical .value { color: var(--crimson); }
+  .metric.high .value { color: var(--amber); }
+
+  main { max-width: 960px; margin: 0 auto; padding: 28px 32px 80px; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+  .port-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-left: 3px solid var(--unknown);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+  }
+  .port-card.critical { border-left-color: var(--crimson); }
+  .port-card.high { border-left-color: var(--amber); }
+  .port-card.medium { border-left-color: #D9C24E; }
+  .port-card.low { border-left-color: var(--emerald); }
+
+  .port-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .port-num { font-family: Consolas, monospace; font-size: 16px; font-weight: 700; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .badge.critical { background: rgba(240,71,92,0.15); color: var(--crimson); }
+  .badge.high { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .badge.medium { background: rgba(217,194,78,0.15); color: #D9C24E; }
+  .badge.low { background: rgba(46,217,163,0.15); color: var(--emerald); }
+  .badge.unknown { background: rgba(75,90,104,0.2); color: var(--unknown); }
+  .cve-count { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  .finding { border-top: 1px solid var(--panel-line); padding: 8px 0; }
+  .finding-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .finding-head .sw { font-family: Consolas, monospace; }
+  .finding-head .cnt { color: var(--muted); }
+
+  .cve-list { list-style: none; margin: 0; padding: 0; }
+  .cve-list li {
+    display: grid;
+    grid-template-columns: 130px 46px 1fr;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 3px 0;
+  }
+  .cve-list .id { color: var(--text); font-family: Consolas, monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agentic Security Dashboard</h1>
+  <div class="sub">NetworkScanner + NVD CVE lookup, launched on demand</div>
+</header>
+
+<div class="toolbar">
+  <div class="field">
+    <label for="target_ip">Target IP</label>
+    <input id="target_ip" type="text" value="127.0.0.1">
+  </div>
+  <div class="field">
+    <label for="start_port">Start Port</label>
+    <input id="start_port" type="number" value="1">
+  </div>
+  <div class="field">
+    <label for="end_port">End Port</label>
+    <input id="end_port" type="number" value="1024">
+  </div>
+  <button id="launchBtn">Launch Scan</button>
+
+  <div class="status-area">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Idle</span>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric"><div class="value" id="mOpenPorts">–</div><div class="label">Open Ports</div></div>
+  <div class="metric"><div class="value" id="mTotalCves">–</div><div class="label">Total CVEs</div></div>
+  <div class="metric critical"><div class="value" id="mCritical">–</div><div class="label">Critical</div></div>
+  <div class="metric high"><div class="value" id="mHigh">–</div><div class="label">High</div></div>
+</div>
+
+<main id="mainPanel">
+  <p class="empty">No scan run yet. Enter a target above and click Launch Scan.</p>
+</main>
+
+<script>
+let pollTimer = null;
+
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const launchBtn = document.getElementById('launchBtn');
+const mainPanel = document.getElementById('mainPanel');
+
+document.getElementById('launchBtn').addEventListener('click', async () => {
+  const target_ip = document.getElementById('target_ip').value.trim();
+  const start_port = parseInt(document.getElementById('start_port').value, 10);
+  const end_port = parseInt(document.getElementById('end_port').value, 10);
+
+  if (!target_ip || isNaN(start_port) || isNaN(end_port)) {
+    alert('Please fill in target IP, start port, and end port.');
+    return;
+  }
+
+  launchBtn.disabled = true;
+  setStatus('scanning', 'Scanning...');
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_ip, start_port, end_port })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed to start scan');
+    }
+    startPolling();
+  } catch (e) {
+    setStatus('error', e.message);
+    launchBtn.disabled = false;
+  }
+});
+
+function setStatus(kind, text) {
+  statusDot.className = 'status-dot' + (kind ? ' ' + kind : '');
+  statusText.textContent = text;
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollStatus, 2000);
+  pollStatus();
+}
+
+async function pollStatus() {
+  const resp = await fetch('/api/scan/status');
+  const data = await resp.json();
+
+  if (data.status === 'scanning') {
+    setStatus('scanning', 'Scanning...');
+  } else if (data.status === 'complete') {
+    clearInterval(pollTimer);
+    setStatus('complete', 'Complete');
+    launchBtn.disabled = false;
+    await loadReport(data.file);
+  } else if (data.status === 'error') {
+    clearInterval(pollTimer);
+    setStatus('error', 'Error: ' + (data.error || 'unknown'));
+    launchBtn.disabled = false;
+  }
+}
+
+async function loadReport(file) {
+  const url = file ? `/api/report?file=${encodeURIComponent(file)}` : '/api/report';
+  const resp = await fetch(url);
+  if (!resp.ok) return;
+  const report = await resp.json();
+  renderReport(report);
+}
+
+function renderReport(report) {
+  const s = report.summary;
+  document.getElementById('mOpenPorts').textContent = s.open_ports;
+  document.getElementById('mTotalCves').textContent = s.total_cves;
+  document.getElementById('mCritical').textContent = s.critical;
+  document.getElementById('mHigh').textContent = s.high;
+
+  if (report.ports.length === 0) {
+    mainPanel.innerHTML = '<p class="empty">No open ports with banners in this scan.</p>';
+    return;
+  }
+
+  mainPanel.innerHTML = report.ports.map(renderPortCard).join('');
+}
+
+function renderPortCard(p) {
+  const sevLabel = p.max_severity !== null ? `CVSS ${p.max_severity.toFixed(1)}` : 'no CVE data';
+  const findingsHtml = p.findings.map(f => {
+    const cves = (f.cve_details || []).slice(0, 5).map(c => `
+      <li>
+        <span class="id">${escapeHtml(c.id)}</span>
+        <span>${c.severity !== null && c.severity !== undefined ? Number(c.severity).toFixed(1) : '—'}</span>
+        <span>${escapeHtml((c.description || '').slice(0, 140))}${(c.description || '').length > 140 ? '…' : ''}</span>
+      </li>`).join('');
+    return `
+      <div class="finding">
+        <div class="finding-head">
+          <span class="sw">${escapeHtml(f.software)}</span>
+          <span class="cnt">${f.cves_found} match${f.cves_found === 1 ? '' : 'es'}</span>
+        </div>
+        ${cves ? `<ul class="cve-list">${cves}</ul>` : ''}
+      </div>`;
+  }).join('');
+
+  return `
+    <article class="port-card ${p.severity_class}">
+      <div class="port-head">
+        <span class="port-num">:${p.port}</span>
+        <span class="badge ${p.severity_class}">${sevLabel}</span>
+        <span class="cve-count">${p.total_cves} CVE${p.total_cves === 1 ? '' : 's'}</span>
+      </div>
+      ${findingsHtml}
+    </article>`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// on load, try to show the most recent report if one already exists
+loadReport(null);
+</script>
+</body>
+</html>

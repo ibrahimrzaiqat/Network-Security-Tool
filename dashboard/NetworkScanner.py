@@ -13,6 +13,7 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
+
 def scan_ports(target_ip, target_port):
     try:
         scan_socket= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -159,8 +160,8 @@ def look_cve_data(software_name):
     return parse_cve_response(response_json)
 
 def extract_software_list(banner: str):
-    # finds all "name/version" patterns in the banner
-    matches = re.findall(r'([A-Za-z][\w\-]*)/([\d][\w.\-]*)', banner)
+    # finds "name/version" (Apache/2.4.7) and "name_version" (OpenSSH_6.6.1p1) patterns
+    matches = re.findall(r'([A-Za-z][\w\-]*)[/_]([\d][\w.\-]*)', banner)
     return matches  # returns a list of tuples: [("SimpleHTTP", "0.6"), ("Python", "3.14.4")]
 
 def parse_arguments():
@@ -171,18 +172,11 @@ def parse_arguments():
     parser.add_argument("--workers", type=int, default=100, help="Number of concurrent scan threads (default: 100)")
     return parser.parse_args()
 
-if __name__ =="__main__":
-    args = parse_arguments()
-    
-    target_ip = args.target_ip
-    starting_port = args.start_port
-    ending_port = args.end_port
-    maximum_workers = args.workers
-
+def run_scan(target_ip, starting_port, ending_port, maximum_workers=100):
     if starting_port > ending_port:
         print("Starting port can't be greater than ending port.")
-        sys.exit(1)
-    
+        return None
+
     if maximum_workers >= 500:
         print(f"Requested {maximum_workers} workers exceeds the safe limit — using 500 instead.")
         maximum_workers = 500
@@ -198,7 +192,14 @@ if __name__ =="__main__":
         banner=grab_banner(target_ip, port)
         if banner:
             print(f"Port: {port}: {banner.strip()}\n\n\n")
-            software_list = extract_software_list(banner)   
+            software_list = extract_software_list(banner) 
+
+            if not software_list:
+                scan_report["results"][port] = [{
+                    "software": "unknown (banner: " + banner.strip()[:60] + ")",
+                    "cves_found": 0,
+                    "cve_details": []
+                }]  
             
             for name, version in software_list:
                 if name.lower() in IGNORE_LIST:
@@ -253,3 +254,9 @@ if __name__ =="__main__":
         json.dump(scan_report, outfile, indent=4)
     
     print(f"\nScan complete! Full results saved to {report_filename}")
+    return report_filename
+
+
+if __name__ == "__main__":
+    args = parse_arguments()
+    run_scan(args.target_ip, args.start_port, args.end_port, args.workers)

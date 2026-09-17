@@ -42,7 +42,7 @@ Safe targets for practice:
 
 ## Setup
 
-**Requirements:** Python 3.8+
+Requirements: Python 3.8+
 
 1. Clone the repository:
    ```bash
