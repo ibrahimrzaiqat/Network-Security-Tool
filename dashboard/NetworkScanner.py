@@ -14,42 +14,75 @@ YELLOW = "\033[93m"
 RESET = "\033[0m"
 
 
-def scan_ports(target_ip, target_port):
+def probe_ports(target_ip, target_port, timeout=1):
+
+    http_nudge = b"HEAD / HTTP/1.1\r\nHost: target\r\n\r\n"
+    probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe_socket.settimeout(timeout)
+
     try:
-        scan_socket= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        address= (target_ip,target_port)
-        scan_socket.settimeout(1)
-        result= scan_socket.connect_ex(address)#connect_ex returns 0 if successful connection
-        scan_socket.close()
-        return result == 0
+        adress = (target_ip, target_port)
+        result = probe_socket.connect_ex(adress)  
+        if result != 0:
+            return False, None
+    except socket.error as e:
+            print(f"Socket connection error: {e}")
+            return False, None
 
-    except socket.error:
+    banner= None
+    try:
+        try:
+            data = probe_socket.recv(1024)
+        except (socket.timeout, socket.error):
+            data = b''
 
-        return False
-    
+        if data:
+            try:
+                banner= data.decode("UTF-8")
+            except UnicodeDecodeError as e:
+                print(f"Decoding ERROR : {e}")
+                banner= None
+        else:
+            try:
+                probe_socket.send(http_nudge)
+                answer = probe_socket.recv(1024)
+            except (socket.timeout, socket.error):
+                answer = b''
+
+            if answer:
+                try:
+                    banner = answer.decode("UTF-8")
+                except UnicodeDecodeError as e:
+                    print(f"Decoding ERROR : {e}")
+                    banner = None
+    finally:
+        probe_socket.close()
+
+    return True, banner
+
 def scan_range(target_ip, start_port, ending_port, maximum_workers=100):
     if start_port> ending_port:
         print(f"Starting port cant be less than ending port.")
-        return []
+        return {}
     
     
     print(f"Scanning {target_ip} from starting from port: {start_port}, ending at port: {ending_port}")
 
-    open_ports=[]
+    open_ports={}
     start_scan_time= time.time()
     futures={}
 
     #The pool automatically manages handing out work to whichever of its limited threads is currently free, queuing the rest until a slot opens up.
     with ThreadPoolExecutor(max_workers=maximum_workers) as executor:
         for port in range(start_port, ending_port+1):#Sequential scan which wil take long 
-            future= executor.submit(scan_ports, target_ip, port)
+            future= executor.submit(probe_ports, target_ip, port)
             futures[future]=port
     
         for future in as_completed(futures):
             port= futures[future]
-            is_open= future.result()
+            is_open, banner = future.result()
             if is_open:
-                open_ports.append(port)
+                open_ports[port]= banner
 
 
     total_time_taken = time.time() - start_scan_time
@@ -59,46 +92,6 @@ def scan_range(target_ip, start_port, ending_port, maximum_workers=100):
         print(f"OPEN Ports: {open_ports}")
     
     return open_ports
-
-def grab_banner(target_ip, port):
-    http_nudge=b"HEAD / HTTP/1.1\r\nHost: target\r\n\r\n"
-    banner_socket= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        address= (target_ip,port)
-        banner_socket.settimeout(2)
-        banner_socket.connect(address)
-        try:
-            data= banner_socket.recv(1024)
-        except socket.timeout:
-            data=b''
-
-        if data:
-            try:
-                data= data.decode("UTF-8")
-                return data
-            except UnicodeDecodeError as e:
-                print(f"Decoding ERROR : {e}")
-                return None
-        else:
-            banner_socket.send(http_nudge)
-            try:
-                answer = banner_socket.recv(1024)
-            except socket.timeout:
-                answer = b''
-            if answer:
-                try:
-                    answer= answer.decode("UTF-8")
-                    return answer
-                except UnicodeDecodeError as e:
-                    print(f"Decoding ERROR : {e}")
-                    return None 
-            else:
-                return None  
-    except socket.error as e:
-        print(f"Socket connection error: {e}")
-        return None
-    finally:
-        banner_socket.close()
     
 def query_NVD(software_name : str):
     url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -188,8 +181,7 @@ def run_scan(target_ip, starting_port, ending_port, maximum_workers=100):
     scan_report={"target_ip": target_ip, "results": {}}
     IGNORE_LIST = {"http", "https", "ftp", "ssh", "smtp", "pop3", "imap"}
 
-    for port in scan_range(target_ip, starting_port, ending_port, maximum_workers):
-        banner=grab_banner(target_ip, port)
+    for port, banner in scan_range(target_ip, starting_port, ending_port, maximum_workers).items():
         if banner:
             print(f"Port: {port}: {banner.strip()}\n\n\n")
             software_list = extract_software_list(banner) 
@@ -247,6 +239,11 @@ def run_scan(target_ip, starting_port, ending_port, maximum_workers=100):
                 
         else:
             print(f"Port {port}: no banner received")
+            scan_report["results"][port] = [{
+                "software": "unknown (open port, no banner)",
+                "cves_found": 0,
+                "cve_details": []
+            }]
 
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     report_filename = f"scan_report_({target_ip})_({starting_port}-{ending_port})_({timestamp}).json"
