@@ -1,4 +1,14 @@
+# Personal config file
 config.py
+
+# PyInstaller Build Artifacts
+build/
+dist/
+*.spec
+#Other files to ignore
+config_loader.py
 __pycache__/
 *.json
-New Concepts.txt
+config.env
+.env
+*.env

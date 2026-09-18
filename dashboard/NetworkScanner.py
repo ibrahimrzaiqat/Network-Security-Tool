@@ -8,7 +8,9 @@ import json
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from config import NVD_API_KEY
+from config_loader import get_key 
+
+NVD_API_KEY= get_key("NVD_API_KEY")
 
 RED = "\033[91m"
 YELLOW = "\033[93m"

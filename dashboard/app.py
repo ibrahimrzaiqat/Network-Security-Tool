@@ -1,10 +1,12 @@
 import os
-import glob
 import json
 import time
+import threading
+import signal
 from pathlib import Path
 from typing import Optional
 import socket
+import uvicorn
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -16,18 +18,21 @@ from NetworkScanner import run_scan
 
 from google import genai
 from google.genai import types
-from config import GEMINI_API_KEY
+from config_loader import get_key, app_dir, resource_dir
 
 from NetworkDiscovery import discover_network
 
 #==================================================
+GEMINI_API_KEY = get_key("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-BASE_DIR = Path(__file__).resolve().parent
-REPORTS_DIR = BASE_DIR
+#BASE_DIR = Path(__file__).resolve().parent
+#REPORTS_DIR = BASE_DIR
+# Removed the above line and replaced it with the following to use app_dir() for pyinstaller compatibility
+REPORTS_DIR = Path(app_dir())
 
 app = FastAPI(title="Agentic Security Dashboard")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates = Jinja2Templates(directory=Path(resource_dir()) / "templates")
 
 SCAN_STATUS = {"status": "idle", "file": None, "error": None}
 
@@ -170,14 +175,17 @@ def build_advice_prompt(report_data: dict) -> str:
         "3. Only provide Ubuntu (apt/ufw/systemctl) commands.",
         "\n================ DATA INPUT ================"
     ]
-    
+
+    any_ports_added= False
+
     for p in report_data.get("ports", []):
         port_num = p.get("port")
-        max_sev = p.get("max_severity", "None")
+        max_sev = p.get("max_severity")
         
         if max_sev is None or float(max_sev) < 4.0:
             continue
-            
+
+        any_ports_added= True
         prompt_lines.append(f"\nPort {port_num} (Highest CVSS: {max_sev}):")
         
         for finding in p.get("findings", []):
@@ -192,7 +200,7 @@ def build_advice_prompt(report_data: dict) -> str:
                     desc = str(cve.get("description", ""))[:100] + "..."
                     prompt_lines.append(f"  - {cve_id} (Sev: {sev}): {desc}")
 
-    return "\n".join(prompt_lines)
+    return "\n".join(prompt_lines), any_ports_added
 
 
 @app.get("/api/agent")
@@ -209,9 +217,9 @@ def api_agent():
     if report_data["summary"]["total_cves"] == 0:
         return {"advice": "Open ports were detected, but no banners or CVEs were found. No AI analysis is required."}
 
-    prompt = build_advice_prompt(report_data)
+    prompt, any_ports_added = build_advice_prompt(report_data)
     
-    if "Port " not in prompt:
+    if not any_ports_added:
         return {"advice": "Ports are open, but no high-severity vulnerabilities were found. No immediate action required."}
     max_retries = 3
     for attempt in range(max_retries):
@@ -229,12 +237,10 @@ def api_agent():
             raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 @app.get("/api/discover")
-def api_discover_network(subnet: str = "192.168.1.0/24"):
+def api_discover_network(subnet: Optional[str] = None):
     try:
         devices = discover_network(subnet)
         return {"status": "success", "devices": devices}
-    except PermissionError:
-        return {"status": "error", "detail": "Permission denied. Run the server with sudo."}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
@@ -249,3 +255,34 @@ def get_my_ip():
         return {"ip": local_ip}
     except Exception:
         return {"ip": "127.0.0.1"}
+
+LAST_HEARTBEAT = time.time()
+
+@app.post("/api/heartbeat")
+def heartbeat():
+    """Receives ping from the frontend to keep the server alive."""
+    global LAST_HEARTBEAT
+    LAST_HEARTBEAT = time.time()
+    return {"status": "alive"}
+
+def monitor_heartbeat():
+    """Kills the app if the UI stops pinging for 10 seconds."""
+    global LAST_HEARTBEAT
+    time.sleep(15)  # Give the app 15 seconds to start up before checking
+    
+    while True:
+        time.sleep(2)
+        if time.time() - LAST_HEARTBEAT > 10:
+            print("UI closed. Shutting down background server...")
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+            except Exception:
+                os._exit(0)
+
+# Start the monitor thread immediately
+monitor_thread = threading.Thread(target=monitor_heartbeat, daemon=True)
+monitor_thread.start()
+
+if __name__ == "__main__":
+    print("Starting Agentic Security Dashboard on http://127.0.0.1:8000")
+    uvicorn.run(app, host="127.0.0.1", port=8000)

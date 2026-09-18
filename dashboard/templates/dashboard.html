@@ -671,6 +671,12 @@ downloadScriptBtn.addEventListener('click', () => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   });
+
+  // Send a heartbeat ping every 3 seconds
+  setInterval(() => {
+    fetch('/api/heartbeat', { method: 'POST' }).catch(err => {});
+  }, 3000);
+
 // on load, try to show the most recent report if one already exists
 //loadReport(null);
 </script>
