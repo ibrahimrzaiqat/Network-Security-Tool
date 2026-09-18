@@ -68,6 +68,45 @@
     cursor: pointer;
   }
   #launchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  .discovery-panel {
+    padding: 12px 32px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .discovery-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  #discoverBtn {
+    background: #4A5568;
+    color: #E2E8F0;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #discoverBtn:hover { background: #2D3748; }
+  #discoverBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #discoveryResults {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 120px; /* Locks the height and makes it scrollable */
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  
+  /* Custom scrollbar styling to match the dark theme */
+  #discoveryResults::-webkit-scrollbar { width: 6px; }
+  #discoveryResults::-webkit-scrollbar-track { background: var(--bg); border-radius: 4px; }
+  #discoveryResults::-webkit-scrollbar-thumb { background: #4A5568; border-radius: 4px; }
 
   .status-area {
     display: flex;
@@ -269,6 +308,16 @@
   </div>
 </div>
 
+<div class="discovery-panel">
+  <div class="discovery-controls">
+    <button id="myIpBtn" style="background: #2D3748; color: #E2E8F0; border: 1px solid #4A5568; padding: 8px 14px; border-radius: 4px; font-weight: 600; font-size: 12px; cursor: pointer;">Scan My Device IP</button>
+    <button id="discoverBtn">Discover Local Network</button>
+    <span id="discoveryLoading" style="display: none; color: #5EA8FF; font-size: 13px;">Sweeping subnet...</span>
+    <span id="discoveryMsg" style="color: var(--emerald); font-size: 13px; margin-left: auto;"></span>
+  </div>
+  <div id="discoveryResults"></div>
+</div>
+
 <div class="metrics">
   <div class="metric"><div class="value" id="mOpenPorts">–</div><div class="label">Open Ports</div></div>
   <div class="metric"><div class="value" id="mTotalCves">–</div><div class="label">Total CVEs</div></div>
@@ -287,6 +336,7 @@
     <span>AI is analyzing network telemetry...</span>
   </div>
   <div id="aiOutput"></div>
+  <button id="downloadScriptBtn" style="display: none; background: #2F855A; color: #fff; border: none; padding: 8px 14px; border-radius: 4px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 12px;">Download .sh Patch Script</button>
 </section>
 
 <main id="mainPanel">
@@ -485,6 +535,142 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+const discoverBtn = document.getElementById('discoverBtn');
+const discoveryResults = document.getElementById('discoveryResults');
+const discoveryLoading = document.getElementById('discoveryLoading');
+const discoveryMsg = document.getElementById('discoveryMsg');
+const targetIpInput = document.getElementById('target_ip'); 
+
+discoverBtn.addEventListener('click', async () => {
+  discoverBtn.disabled = true;
+  discoveryLoading.style.display = 'inline-block';
+  discoveryResults.innerHTML = '';
+  discoveryMsg.textContent = '';
+
+  try {
+    const resp = await fetch('/api/discover?subnet=192.168.1.0/24');
+    const data = await resp.json();
+    
+    if (data.status === 'error') {
+       discoveryResults.innerHTML = `<span style="color: var(--crimson); font-size: 13px;">${escapeHtml(data.detail)}</span>`;
+       return;
+    }
+
+    if (data.devices && data.devices.length > 0) {
+      data.devices.forEach(dev => {
+        const badge = document.createElement('div');
+        
+        // Show Name + IP inside the badge
+        const displayName = dev.name !== dev.ip ? `${dev.name} (${dev.ip})` : dev.ip;
+        
+        if (dev.is_self) {
+          badge.textContent = `★ ${displayName} (This Device)`;
+          badge.style.cssText = 'background: rgba(46,217,163,0.1); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid var(--emerald); color: var(--emerald); font-weight: 600;';
+        } else {
+          badge.textContent = displayName;
+          badge.style.cssText = 'background: #2D3748; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid #4A5568; color: #E2E8F0;';
+        }
+        
+        badge.onmouseover = () => badge.style.borderColor = '#5EA8FF';
+        badge.onmouseout = () => badge.style.borderColor = dev.is_self ? 'var(--emerald)' : '#4A5568';
+        
+        badge.onclick = () => {
+          targetIpInput.value = dev.ip; // Still injects the clean IP into the scanner
+          discoveryMsg.textContent = `Target set to ${dev.ip} (${dev.name})`;
+          targetIpInput.style.borderColor = '#5EA8FF';
+          setTimeout(() => targetIpInput.style.borderColor = 'var(--panel-line)', 1000);
+        };
+        
+        discoveryResults.appendChild(badge);
+      });
+    } else {
+      discoveryResults.innerHTML = '<span style="color: var(--muted); font-size: 13px;">No active devices found on this subnet.</span>';
+    }
+    
+  } catch (e) {
+    discoveryResults.innerHTML = `<span style="color: var(--crimson); font-size: 13px;">Error: ${e.message}</span>`;
+  } finally {
+    discoverBtn.disabled = false;
+    discoveryLoading.style.display = 'none';
+  }
+  });
+
+const myIpBtn = document.getElementById('myIpBtn');
+
+myIpBtn.addEventListener('click', async () => {
+  try {
+    const resp = await fetch('/api/my-ip');
+    const data = await resp.json();
+    
+    if (data.ip) {
+      targetIpInput.value = data.ip;
+      discoveryMsg.textContent = `Target set to your device IP: ${data.ip}`;
+      
+      // Flash the input border blue for visual feedback
+      targetIpInput.style.borderColor = '#5EA8FF';
+      setTimeout(() => targetIpInput.style.borderColor = 'var(--panel-line)', 1000);
+    }
+  } catch (e) {
+    // Fallback if the endpoint fails
+    targetIpInput.value = '127.0.0.1';
+    discoveryMsg.textContent = 'Target set to localhost (127.0.0.1)';
+  }
+  });
+
+  const downloadScriptBtn = document.getElementById('downloadScriptBtn');
+let currentPatchScript = '';
+
+// When the AI output is successfully rendered:
+function renderAiOutput(text) {
+  // Extract code blocks from the AI response
+  const parts = text.split(/```(?:\w*\n)?/);
+  let html = '';
+  let extractedScript = '';
+
+  parts.forEach((part, i) => {
+    if (!part.trim()) return;
+    if (i % 2 === 1) {
+      // If it's a code block, capture it for our download script
+      extractedScript += part.trim() + '\n\n';
+      html += `<pre><code>${escapeHtml(part.trim())}</code></pre>`;
+    } else {
+      let lines = part.trim().split('\n');
+      lines.forEach(line => {
+        let safeLine = escapeHtml(line.trim());
+        if (safeLine.startsWith('### ')) {
+           html += `<h3 style="color: #5EA8FF; margin: 20px 0 8px; font-size: 16px;">${safeLine.substring(4)}</h3>`;
+        } else if (safeLine.startsWith('#### ')) {
+           html += `<h4 style="color: #8CA0B3; margin: 12px 0 4px; font-size: 14px;">${safeLine.substring(5)}</h4>`;
+        } else if (safeLine) {
+           html += `<p style="margin: 0 0 8px;">${safeLine}</p>`;
+        }
+      });
+    }
+  });
+
+  aiOutput.innerHTML = html;
+
+  // If code blocks were found, enable the download patch script button
+  if (extractedScript.trim()) {
+    currentPatchScript = "#!/bin/bash\n# Auto-generated AI Remediation Script\n\n" + extractedScript;
+    downloadScriptBtn.style.display = 'inline-block';
+  } else {
+    downloadScriptBtn.style.display = 'none';
+  }
+}
+
+// Handle the file download click
+downloadScriptBtn.addEventListener('click', () => {
+  const blob = new Blob([currentPatchScript], { type: 'text/x-sh' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'security_patch.sh';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  });
 // on load, try to show the most recent report if one already exists
 //loadReport(null);
 </script>

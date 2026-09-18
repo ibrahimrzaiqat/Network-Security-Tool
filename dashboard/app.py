@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 from typing import Optional
+import socket
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -17,6 +18,9 @@ from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY
 
+from NetworkDiscovery import discover_network
+
+#==================================================
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -223,3 +227,25 @@ def api_agent():
                 time.sleep(3)
                 continue
             raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+@app.get("/api/discover")
+def api_discover_network(subnet: str = "192.168.1.0/24"):
+    try:
+        devices = discover_network(subnet)
+        return {"status": "success", "devices": devices}
+    except PermissionError:
+        return {"status": "error", "detail": "Permission denied. Run the server with sudo."}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+@app.get("/api/my-ip")
+def get_my_ip():
+    try:
+        # Creates a dummy socket to find the preferred local route IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return {"ip": local_ip}
+    except Exception:
+        return {"ip": "127.0.0.1"}

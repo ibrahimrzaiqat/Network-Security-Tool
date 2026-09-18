@@ -1,5 +1,6 @@
 import socket
 import sys
+import os
 import time
 import requests
 import re
@@ -14,7 +15,7 @@ YELLOW = "\033[93m"
 RESET = "\033[0m"
 
 
-def probe_ports(target_ip, target_port, timeout=1):
+def probe_ports(target_ip, target_port, timeout=1.0):
 
     http_nudge = b"HEAD / HTTP/1.1\r\nHost: target\r\n\r\n"
     probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -70,19 +71,25 @@ def scan_range(target_ip, start_port, ending_port, maximum_workers=100):
 
     open_ports={}
     start_scan_time= time.time()
-    futures={}
+    
+    chunksize= 1000
 
     #The pool automatically manages handing out work to whichever of its limited threads is currently free, queuing the rest until a slot opens up.
     with ThreadPoolExecutor(max_workers=maximum_workers) as executor:
-        for port in range(start_port, ending_port+1):#Sequential scan which wil take long 
-            future= executor.submit(probe_ports, target_ip, port)
-            futures[future]=port
-    
-        for future in as_completed(futures):
-            port= futures[future]
-            is_open, banner = future.result()
-            if is_open:
-                open_ports[port]= banner
+        for current_start in range(start_port, ending_port+1, chunksize):
+            
+            current_end = min(current_start + chunksize - 1, ending_port)
+            futures = {}
+
+            for port in range(current_start, current_end + 1):#Sequential scan which wil take long 
+                future= executor.submit(probe_ports, target_ip, port)
+                futures[future]=port    
+
+            for future in as_completed(futures):
+                port= futures[future]
+                is_open, banner = future.result()
+                if is_open:
+                    open_ports[port]= banner
 
 
     total_time_taken = time.time() - start_scan_time
@@ -162,20 +169,23 @@ def parse_arguments():
     parser.add_argument("target_ip", help="Target IP address to scan")
     parser.add_argument("start_port", type=int, help="Starting port number")
     parser.add_argument("end_port", type=int, help="Ending port number")
-    parser.add_argument("--workers", type=int, default=100, help="Number of concurrent scan threads (default: 100)")
+    parser.add_argument("--workers", type=int, default=0, help="Number of concurrent scan threads (default: 0 for auto scale)")
     return parser.parse_args()
 
-def run_scan(target_ip, starting_port, ending_port, maximum_workers=100):
+def run_scan(target_ip, starting_port, ending_port, maximum_workers=0):
     if starting_port > ending_port:
         print("Starting port can't be greater than ending port.")
         return None
 
-    if maximum_workers >= 500:
+    if maximum_workers == 0:
+        maximum_workers = min(500, (os.cpu_count() or 1) * 15)
+        print(f"Auto-scaling threads: Using {maximum_workers} workers.")
+    elif maximum_workers >= 500:
         print(f"Requested {maximum_workers} workers exceeds the safe limit — using 500 instead.")
         maximum_workers = 500
-    elif maximum_workers <= 0:
-        print(f"Requested {maximum_workers} workers is invalid — using 100 instead.")
-        maximum_workers = 100
+    elif maximum_workers < 0:
+        print(f"Requested {maximum_workers} workers is invalid — auto-scaling instead.")
+        maximum_workers = min(500, (os.cpu_count() or 1) * 15)
 
     cve_cache={}
     scan_report={"target_ip": target_ip, "results": {}}
