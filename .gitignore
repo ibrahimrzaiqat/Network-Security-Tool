@@ -6,9 +6,6 @@ build/
 dist/
 *.spec
 #Other files to ignore
-config_loader.py
 __pycache__/
 *.json
 config.env
-.env
-*.env

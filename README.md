@@ -1,122 +1,101 @@
-# Network Security Toolkit
+# Agentic Security Dashboard 🛡️
 
-A Python-based command-line tool for network reconnaissance and vulnerability
-awareness. It scans a target for open ports, identifies what software is
-running on them, and checks that software against the National Vulnerability
-Database (NVD) for known CVEs — producing a structured JSON report at the end.
+A portable, driver-free network vulnerability scanner that pairs a concurrent Python scanning engine with an AI remediation agent. It discovers local devices, identifies active services, crosses-references them against the National Vulnerability Database (NVD), and generates actionable, ready-to-run `.sh` patch scripts using Google's Gemini LLM.
 
-This project was built as a hands-on learning exercise in networking,
-concurrency, and working with real-world security data sources.
+This project evolved from a command-line learning exercise into a fully packaged, self-terminating web dashboard designed to bridge the gap between vulnerability discovery and immediate system remediation.
 
 ## ⚠️ Legal & Ethical Use
 
-**Only run this tool against systems you own, or have explicit written
-permission to test.** Unauthorized scanning of networks or systems you do not
-control may be illegal in your jurisdiction, regardless of intent.
+**Only run this tool against systems you own, or have explicit written permission to test.** Unauthorized scanning of networks or systems you do not control may be illegal in your jurisdiction, regardless of intent.
 
 Safe targets for practice:
-- Your own machines (`127.0.0.1`, your own LAN devices)
-- Deliberately vulnerable practice environments (e.g. Metasploitable)
-- [scanme.nmap.org](https://scanme.nmap.org) — a host the Nmap project
-  explicitly maintains for public scanning practice
 
-## Features
+* Your own machines (`127.0.0.1`, your own LAN devices)
+* Deliberately vulnerable practice environments (e.g., Metasploitable, local VMs)
+* [scanme.nmap.org](https://scanme.nmap.org?utm_source=gemini) — a host the Nmap project explicitly maintains for public scanning practice
 
-- 🔍 **Multi-threaded TCP port scanner** — uses a bounded thread pool
-  (`ThreadPoolExecutor`) to scan large port ranges quickly without
-  overwhelming your system
-- 📡 **Banner grabbing** — connects to open ports and reads service
-  identification data, handling both services that announce themselves
-  immediately (e.g. SSH) and services that require a request first (e.g. HTTP)
-- 🧩 **Software/version extraction** — parses banners for `name/version`
-  patterns using regex
-- 🛡️ **CVE lookup via the NVD API** — checks identified software against
-  the National Vulnerability Database, with local caching to avoid redundant
-  API calls and automatic rate-limit-friendly delays
-- 🎨 **Severity-based color coding** — critical (9.0+) and high (7.0+)
-  severity CVEs are highlighted in the terminal
-- 📄 **JSON report export** — every scan produces a timestamped,
-  machine-readable report file
-- ⚙️ **Configurable concurrency** — tune the number of scanning threads via
-  a command-line flag, with a safety cap to prevent resource exhaustion
+---
 
-## Setup
+## What Was Used (Architecture & Tech Stack)
 
-Requirements: Python 3.8+
+The application is built to be entirely self-contained without requiring heavy database installations or external networking drivers (like Npcap).
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/ibrahimrzaiqat/Network-Security-Tool.git
-   cd network-security-toolkit
-   ```
+* **Backend Engine:** Python, FastAPI, and Uvicorn.
+* **Concurrency:** `concurrent.futures.ThreadPoolExecutor` for high-speed network sweeps and port scanning.
+* **Frontend:** Vanilla HTML, CSS, and JavaScript rendered via Jinja2 templates.
+* **AI Provider:** Google GenAI SDK (Gemini Flash models).
+* **Storage:** Ephemeral local JSON files (bypassing SQLite for maximum portability).
+* **Packaging:** PyInstaller (compiled into a single `--noconsole` Windows `.exe` with automated heartbeat process management).
 
-2. Install dependencies:
-   ```bash
-   pip install requests
-   ```
+---
 
-3. Get a free NVD API key (recommended — raises your rate limit significantly):
-   - Register at https://nvd.nist.gov/developers/request-an-api-key
-   - Create a file named `config.py` in the project folder:
-     ```python
-     NVD_API_KEY = "your-key-here"
-     ```
-   - This file is excluded from git via `.gitignore` — never commit your key
+## Critical API Dependencies
 
-## Usage
+For the dashboard to function correctly, it requires two external APIs. These must be configured via a `config.env` file.
 
+### 1. National Vulnerability Database (NVD) API
+
+* **Requirement:** While the NVD API can technically be queried without a key, public rate limits are extremely strict and will cause scans to fail. A free API key is heavily recommended. Get one at: [NVD API Request](https://nvd.nist.gov/developers/request-an-api-key?utm_source=gemini).
+
+### 2. Google Gemini API
+
+* **Requirement:** A valid Google Gemini API key is mandatory for the "Generate AI Mitigation Report" feature to function. Get one at: [Google AI Studio](https://aistudio.google.com/?utm_source=gemini).
+
+---
+
+## Core Features
+
+* **Driver-Free Network Discovery:** Identifies live hosts and resolves NetBIOS/DNS hostnames natively using pure Python and OS-level ICMP sweeps.
+* **Concurrent TCP Port Scanning:** Multi-threaded TCP connect scanning optimized for speed. It grabs banners from open ports, handling both immediate announcements (SSH) and request-prompted services (HTTP).
+* **Automated CVE Mapping & UI Highlighting:** Extracts software versions via regex and queries the NVD. Results are color-coded in the UI by severity (Critical = 9.0+, High = 7.0+).
+* **Agentic Remediation:** Pipes scan results to Gemini, outputting specific threat mitigations and providing a one-click **Download .sh Patch Script** button to export actionable fixes.
+* **Zero-Setup Portability:** Bundled into a single Windows `.exe`. A browser-side heartbeat monitor ensures the background Uvicorn server safely terminates itself 10 seconds after the browser tab is closed, preventing zombie processes.
+
+---
+
+## Installation & Setup
+
+### Option 1: Portable Windows Executable (Recommended)
+
+1. Download `AgenticSecurityDashboard.exe` from the **Releases** tab.
+2. Place the `.exe` in an empty directory.
+3. In the exact same directory, create a text file named `config.env` and populate it with your API keys:
+```env
+NVD_API_KEY=your_nvd_key_here
+GEMINI_API_KEY=your_gemini_key_here
+
+```
+
+
+4. Double-click the `.exe`. The server will start silently in the background. Navigate to `[http://127.0.0.1:8000](http://127.0.0.1:8000)` in your web browser.
+
+### Option 2: Run from Source
+
+1. Clone the repository and install the dependencies:
 ```bash
-python NetworkScanner.py <target_ip> <start_port> <end_port> [--workers N]
+git clone https://github.com/ibrahimrzaiqat/Agentic-Security-Dashboard.git
+cd Agentic-Security-Dashboard
+pip install fastapi uvicorn google-genai requests pydantic jinja2
+
 ```
 
-**Example:**
+
+2. Create your `config.env` file in the root directory.
+3. Launch the application:
 ```bash
-python NetworkScanner.py 127.0.0.1 1 1024 --workers 200
+python launcher.py
+
 ```
 
-**Sample output:**
-```
-Scanning 127.0.0.1 from starting from port: 1, ending at port: 1024
-Scan DONE, Total time taken: 1.02s
-OPEN Ports: [8000]
 
-Port: 8000: HTTP/1.0 200 OK
-Server: SimpleHTTP/0.6 Python/3.14.4
-...
+4. Open `[http://127.0.0.1:8000](http://127.0.0.1:8000)` in your browser.
 
-Checking vulnerabilities for: Python 3.14.4
-CVEs Found: 3
-  - CVE-2023-XXXXX (Severity: 7.5)
-    Info: A vulnerability was found in...
+---
 
-Scan complete! Full results saved to scan_report_127.0.0.1_1-1024_20260717_143022.json
-```
+## Usage Workflow
 
-Run `python NetworkScanner.py --help` for full argument details.
-
-## How It Works
-
-1. **Port scanning** — attempts a TCP connection to every port in the given
-   range, using a thread pool to check many ports concurrently
-2. **Banner grabbing** — for each open port, connects and either reads an
-   unprompted greeting or sends a minimal HTTP request to provoke one
-3. **Software identification** — extracts `name/version` pairs from the
-   banner text using pattern matching
-4. **CVE lookup** — queries the NVD API for each identified software/version,
-   caching results locally to minimize redundant requests
-5. **Reporting** — compiles everything into a timestamped JSON report
-
-## Limitations
-
-- TCP connect scanning only — no UDP scanning, no stealth/SYN scan techniques
-- Software/version detection is regex-based and works best on services that
-  expose a `name/version`-style banner; non-standard formats may be missed
-- NVD keyword search can occasionally return loosely related CVEs rather than
-  exact version matches — results should be reviewed, not treated as
-  definitive
-- No authentication or protocol-specific probes beyond a generic HTTP nudge —
-  some services may not respond to banner-grab attempts at all
-
-## License
-
-This project is for educational purposes. Use responsibly.
+1. **Discover:** Enter your subnet (or leave blank to auto-detect) and click **Discover Devices** to map active local IPs and hostnames.
+2. **Scan:** Input a target IP, define a port range (e.g., `1-1024`), and click **Start Scan**.
+3. **Analyze:** Review the generated JSON-backed vulnerability report in the UI, sorted by highest CVSS severity.
+4. **Remediate:** Click **Generate AI Mitigation Report** to send the findings to the Gemini agent.
+5. **Patch:** Click **Download .sh Patch Script** to export the AI's terminal commands. Transfer this `.sh` file to your target Linux/WSL environment to apply the patches.
