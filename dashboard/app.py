@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,12 @@ from pydantic import BaseModel
 from starlette.requests import Request
 
 from NetworkScanner import run_scan
+
+from google import genai
+from google.genai import types
+from config import GEMINI_API_KEY
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 BASE_DIR = Path(__file__).resolve().parent
 REPORTS_DIR = BASE_DIR
@@ -135,3 +142,84 @@ def api_report(file: Optional[str] = Query(default=None)):
     if not filename:
         raise HTTPException(status_code=404, detail="No scan reports found yet")
     return build_report_payload(filename)
+
+
+def build_advice_prompt(report_data: dict) -> str:
+    prompt_lines = [
+        "You are an expert SOC Analyst and Linux Security Engineer.",
+        "Review the following network vulnerability scan summary for an Ubuntu/WSL system.",
+        "For each open port with vulnerabilities, strictly follow this EXACT markdown format:",
+        "",
+        "### Port [Number]: [Service Name]",
+        "#### 1. Risk",
+        "[1-2 sentence explanation of the threat, explicitly naming the specific CVE IDs provided.]",
+        "#### 2. Mitigation",
+        "[Brief explanation of the fix]",
+        "```bash",
+        "# [Comment explaining the command]",
+        "[Exact terminal command to fix the issue]",
+        "```",
+        "",
+        "CRITICAL RULES:",
+        "1. You MUST wrap all terminal commands inside ```bash code blocks so the UI renders them correctly.",
+        "2. Do not use generic summaries; name the specific CVEs from the data.",
+        "3. Only provide Ubuntu (apt/ufw/systemctl) commands.",
+        "\n================ DATA INPUT ================"
+    ]
+    
+    for p in report_data.get("ports", []):
+        port_num = p.get("port")
+        max_sev = p.get("max_severity", "None")
+        
+        if max_sev is None or float(max_sev) < 4.0:
+            continue
+            
+        prompt_lines.append(f"\nPort {port_num} (Highest CVSS: {max_sev}):")
+        
+        for finding in p.get("findings", []):
+            software = finding.get("software", "Unknown")
+            cves = finding.get("cve_details", [])
+            
+            if cves:
+                prompt_lines.append(f"  Service: {software}")
+                for cve in cves[:3]:
+                    cve_id = cve.get("id")
+                    sev = cve.get("severity")
+                    desc = str(cve.get("description", ""))[:100] + "..."
+                    prompt_lines.append(f"  - {cve_id} (Sev: {sev}): {desc}")
+
+    return "\n".join(prompt_lines)
+
+
+@app.get("/api/agent")
+def api_agent():
+    filename = find_latest_report()
+    if not filename:
+        raise HTTPException(status_code=404, detail="No scan reports found. Run a scan first.")
+    
+    report_data = build_report_payload(filename)
+    
+    if report_data["summary"]["open_ports"] == 0:
+        return {"advice": "No open ports detected. Your network is currently secure."}
+
+    if report_data["summary"]["total_cves"] == 0:
+        return {"advice": "Open ports were detected, but no banners or CVEs were found. No AI analysis is required."}
+
+    prompt = build_advice_prompt(report_data)
+    
+    if "Port " not in prompt:
+        return {"advice": "Ports are open, but no high-severity vulnerabilities were found. No immediate action required."}
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=800))
+            return {"advice": response.text}
+
+        except Exception as e:
+            erorr_msg= str(e)
+            # If it is a 503 Server Overload and we have retries left, wait and try again
+            if "503" in erorr_msg and attempt < max_retries -1:
+                print(f"Server overloaded. Retrying in 3 seconds... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(3)
+                continue
+            raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")

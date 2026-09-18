@@ -105,6 +105,97 @@
   main { max-width: 960px; margin: 0 auto; padding: 28px 32px 80px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 0; }
 
+  .ai-panel {
+    background: linear-gradient(180deg, rgba(139,92,246,0.06), rgba(94,168,255,0.04)), var(--panel);
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 0 24px rgba(139,92,246,0.08), inset 0 0 40px rgba(94,168,255,0.03);
+  }
+  .ai-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .ai-panel-head .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #8B5CF6;
+    box-shadow: 0 0 8px #8B5CF6;
+  }
+  .ai-panel-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background: linear-gradient(90deg, #A78BFA, #5EA8FF);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  #aiGenerateBtn {
+    background: linear-gradient(90deg, #8B5CF6, #5EA8FF);
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #aiGenerateBtn:disabled {
+    background: var(--panel-line);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .ai-loading {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .ai-loading.active { display: flex; }
+  .ai-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(139,92,246,0.25);
+    border-top-color: #8B5CF6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #aiOutput {
+    margin-top: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  #aiOutput:empty { display: none; }
+  #aiOutput p { margin: 0 0 10px; }
+  #aiOutput pre {
+    background: #0A0E14;
+    border: 1px solid var(--panel-line);
+    border-left: 3px solid #8B5CF6;
+    border-radius: 4px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 10px 0;
+  }
+  #aiOutput code {
+    font-family: Consolas, monospace;
+    font-size: 12.5px;
+    color: #7EE8B8;
+  }
+  #aiOutput :not(pre) > code {
+    background: rgba(139,92,246,0.12);
+    color: #C4B5FD;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
   .port-card {
     background: var(--panel);
     border: 1px solid var(--panel-line);
@@ -185,6 +276,19 @@
   <div class="metric high"><div class="value" id="mHigh">–</div><div class="label">High</div></div>
 </div>
 
+<section class="ai-panel">
+  <div class="ai-panel-head">
+    <span class="dot"></span>
+    <h2>AI Security Analyst</h2>
+  </div>
+  <button id="aiGenerateBtn" disabled>Generate AI Mitigation Report</button>
+  <div class="ai-loading" id="aiLoading">
+    <span class="ai-spinner"></span>
+    <span>AI is analyzing network telemetry...</span>
+  </div>
+  <div id="aiOutput"></div>
+</section>
+
 <main id="mainPanel">
   <p class="empty">No scan run yet. Enter a target above and click Launch Scan.</p>
 </main>
@@ -259,7 +363,10 @@ async function pollStatus() {
 async function loadReport(file) {
   const url = file ? `/api/report?file=${encodeURIComponent(file)}` : '/api/report';
   const resp = await fetch(url);
-  if (!resp.ok) return;
+  if (!resp.ok) {
+    aiGenerateBtn.disabled = true;
+    return;
+  }
   const report = await resp.json();
   renderReport(report);
 }
@@ -272,11 +379,74 @@ function renderReport(report) {
   document.getElementById('mHigh').textContent = s.high;
 
   if (report.ports.length === 0) {
-    mainPanel.innerHTML = '<p class="empty">No open ports with banners in this scan.</p>';
-    return;
+    mainPanel.innerHTML = '<p class="empty">No open ports detected in this scan.</p>';
+    aiGenerateBtn.disabled = true; // Keep button disabled
+  } else {
+    mainPanel.innerHTML = report.ports.map(renderPortCard).join('');
+    
+    // Only enable the AI button if there is actual CVE data to analyze
+    if (s.total_cves > 0) {
+      aiGenerateBtn.disabled = false;
+    } else {
+      aiGenerateBtn.disabled = true;
+      aiOutput.innerHTML = '<p style="color: var(--muted); font-size: 13px; margin-top: 14px;">Open ports detected, but no banners or vulnerabilities were found. AI analysis unavailable.</p>';
+    }
   }
+}
 
-  mainPanel.innerHTML = report.ports.map(renderPortCard).join('');
+const aiGenerateBtn = document.getElementById('aiGenerateBtn');
+const aiLoading = document.getElementById('aiLoading');
+const aiOutput = document.getElementById('aiOutput');
+
+aiGenerateBtn.addEventListener('click', fetchAiAnalysis);
+
+async function fetchAiAnalysis() {
+  aiGenerateBtn.disabled = true;
+  launchBtn.disabled = true; // Lock the scan button while AI thinks
+  aiOutput.innerHTML = '';
+  aiLoading.classList.add('active');
+
+  try {
+    const resp = await fetch('/api/agent');
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Request failed (${resp.status})`);
+    }
+    const data = await resp.json();
+    renderAiOutput(data.advice || data.text || '');
+  } catch (e) {
+    aiOutput.innerHTML = `<p style="color: var(--crimson);">Failed to generate report: ${escapeHtml(e.message)}</p>`;
+  } finally {
+    aiLoading.classList.remove('active');
+    aiGenerateBtn.disabled = false;
+    launchBtn.disabled = false; // Unlock the scan button when finished
+  }
+}
+
+function renderAiOutput(text) {
+  const parts = text.split(/```(?:\w*\n)?/);
+  let html = '';
+  parts.forEach((part, i) => {
+    if (!part.trim()) return;
+    if (i % 2 === 1) {
+      // Render the dark terminal code blocks
+      html += `<pre><code>${escapeHtml(part.trim())}</code></pre>`;
+    } else {
+      // Parse markdown headers and standard text
+      let lines = part.trim().split('\n');
+      lines.forEach(line => {
+        let safeLine = escapeHtml(line.trim());
+        if (safeLine.startsWith('### ')) {
+           html += `<h3 style="color: #5EA8FF; margin: 20px 0 8px; font-size: 16px;">${safeLine.substring(4)}</h3>`;
+        } else if (safeLine.startsWith('#### ')) {
+           html += `<h4 style="color: #8CA0B3; margin: 12px 0 4px; font-size: 14px;">${safeLine.substring(5)}</h4>`;
+        } else if (safeLine) {
+           html += `<p style="margin: 0 0 8px;">${safeLine}</p>`;
+        }
+      });
+    }
+  });
+  aiOutput.innerHTML = html;
 }
 
 function renderPortCard(p) {
@@ -316,7 +486,7 @@ function escapeHtml(str) {
 }
 
 // on load, try to show the most recent report if one already exists
-loadReport(null);
+//loadReport(null);
 </script>
 </body>
 </html>
